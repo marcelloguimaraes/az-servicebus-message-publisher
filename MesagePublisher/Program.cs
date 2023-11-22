@@ -5,10 +5,10 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 string connectionString = "Endpoint=sb://sb-credit-eastus2-staging.servicebus.windows.net/;SharedAccessKeyName=credit-risk-parameters-commands;SharedAccessKey=K894slLbkhg9d0XZoPCML6ivpaVvX+yzS+ASbH+kZFg=;EntityPath=credit-risk-parameters-commands";
-const int messageCount = 50000;
+const int messageCount = 600;
 const string queueName = "credit-risk-parameters-commands";
 const string analysisId = "testeMarcelloFixJobsStg";
-long maxSizeInBytes = 10240; //100MB
+long maxSizeInBytes = 1048576; //1MB
 int batchCounter = 1;
 
 ServiceBusClient client;
@@ -52,6 +52,8 @@ for (int i = 1; i <= messageCount; i++)
         batchCounter++;
     }
 }
+
+await sender.SendMessagesAsync(messageBatch);
 
 try
 {
