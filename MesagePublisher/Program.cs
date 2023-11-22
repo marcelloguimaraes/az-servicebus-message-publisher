@@ -1,5 +1,8 @@
 ﻿using System.Text;
+using System.Text.Json.Serialization;
 using Azure.Messaging.ServiceBus;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 string connectionString = "Endpoint=sb://sb-credit-eastus2-staging.servicebus.windows.net/;SharedAccessKeyName=credit-risk-parameters-commands;SharedAccessKey=K894slLbkhg9d0XZoPCML6ivpaVvX+yzS+ASbH+kZFg=;EntityPath=credit-risk-parameters-commands";
 const int messageCount = 50000;
@@ -33,7 +36,8 @@ for (int i = 1; i <= messageCount; i++)
     var message = new ServiceBusMessage(messageBody)
     {
         SessionId = groupId,
-        Subject = "UpdateRiskParametersFromEngine"
+        Subject = "UpdateRiskParametersFromEngine",
+        ContentType = "application/json"
     };
 
     // try adding a message to the batch
