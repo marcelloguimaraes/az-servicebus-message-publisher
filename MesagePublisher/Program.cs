@@ -1,26 +1,26 @@
-﻿
-using System.Text;
+﻿using System.Text;
 using Azure.Messaging.ServiceBus;
 
 string connectionString = "Endpoint=sb://sb-credit-eastus2-staging.servicebus.windows.net/;SharedAccessKeyName=credit-risk-parameters-commands;SharedAccessKey=K894slLbkhg9d0XZoPCML6ivpaVvX+yzS+ASbH+kZFg=;EntityPath=credit-risk-parameters-commands";
 const int messageCount = 50000;
 const string queueName = "credit-risk-parameters-commands";
 const string analysisId = "testeMarcelloFixJobsStg";
-long maxSizeInBytes = 104857600; //100MB
+long maxSizeInBytes = 10240; //100MB
 int batchCounter = 1;
 
 ServiceBusClient client;
 ServiceBusSender sender;
 
 var clientOptions = new ServiceBusClientOptions()
-{ 
+{
     TransportType = ServiceBusTransportType.AmqpWebSockets
 };
 
 client = new ServiceBusClient(connectionString, clientOptions);
 sender = client.CreateSender(queueName);
 
-var createMessageBatchOptions = new CreateMessageBatchOptions(){
+var createMessageBatchOptions = new CreateMessageBatchOptions()
+{
     MaxSizeInBytes = maxSizeInBytes
 };
 
@@ -32,7 +32,8 @@ for (int i = 1; i <= messageCount; i++)
     var messageBody = $@"{{""AnalysisId"":""{analysisId}"", ""GroupId"":""{groupId}"",""Documents"":[{{""Number"":""16418662091"",""Root"":""16418662091"",""Type"":1}}],""Limit"":{{""ExpiresAt"":""2023-12-01T00:00:00"",""GlobalLimit"":{{""MaxLimitAmount"":100000.0}},""ProductLimits"":[{{""Type"":0,""MaxLimitAmount"":50000.0,""Metadata"":{{""max_with_draw_amount"":""2000"",""max_withdraw_percentile"":""0.2""}}}},{{""Type"":1,""MaxLimitAmount"":50000.0,""Metadata"":{{""min_interest_rate"":""2.99"",""max_interest_rate"":""5.99"",""min_term_in_month"":""6"",""max_term_in_month"":""12"",""max_pmt"":""5000"",""estimated_monthly_revenue"":""1200300400""}}}}]}},""Rating"":{{""ExpiresAt"":""2023-12-01T00:00:00"",""Value"":9.9}},""Timestamp"":""2023-11-22T13:00:00.0348313Z"",""CommandKey"":""{Guid.NewGuid().ToString()[0..25]}"",""SessionKey"":""{groupId}"",""ChannelKey"":""CommandsQueue"",""IdempotencyKey"":""{Guid.NewGuid().ToString("N")[0..25]}"",""SagaProcessKey"":""{Guid.NewGuid().ToString("N")[0..25]}"",""BatchProcessKey"":null,""Result"":{{}},""Id"":""{groupId}"",""ApplicationKey"":""console-app"",""UserEmail"":""teste@stone.com.br"",""ValidationResult"":null}}";
     var message = new ServiceBusMessage(messageBody)
     {
-        SessionId = groupId
+        SessionId = groupId,
+        Subject = "UpdateRiskParametersFromEngine"
     };
 
     // try adding a message to the batch
