@@ -1,9 +1,9 @@
 ﻿using Azure.Messaging.ServiceBus;
 
-string connectionString = "Endpoint=sb://sb-credit-eastus2-staging.servicebus.windows.net/;SharedAccessKeyName=credit-risk-parameters-commands;SharedAccessKey=K894slLbkhg9d0XZoPCML6ivpaVvX+yzS+ASbH+kZFg=;EntityPath=credit-risk-parameters-commands";
+string connectionString = "queue-or-topic";
 const int messageCount = 50000;
-const string queueName = "credit-risk-parameters-commands";
-const string analysisId = "test_marcello_fix_jobs_run_1";
+const string queueName = "queue-name";
+const string analysisId = "analisys-id";
 long maxSizeInBytes = 1048576; //1MB
 int batchCounter = 1;
 
