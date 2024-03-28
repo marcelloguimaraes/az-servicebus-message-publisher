@@ -2,10 +2,10 @@
 
 string connectionString = "queue-or-topic";
 const int messageCount = 50000;
-const string queueName = "queue-name";
+const string queueOrTopicName = "queue-or-topic-name";
 const string analysisId = "analisys-id";
-long maxSizeInBytes = 1048576; //1MB
-int batchCounter = 1;
+long maxSizeInBytes = 256000; // More info https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-quotas#messaging-quotas
+int batchCounter = 0;
 
 ServiceBusClient client;
 ServiceBusSender sender;
@@ -16,7 +16,7 @@ var clientOptions = new ServiceBusClientOptions()
 };
 
 client = new ServiceBusClient(connectionString, clientOptions);
-sender = client.CreateSender(queueName);
+sender = client.CreateSender(queueOrTopicName);
 
 var createMessageBatchOptions = new CreateMessageBatchOptions()
 {
