@@ -1,51 +1,70 @@
-﻿using Azure.Messaging.ServiceBus;
+﻿using System.Text;
+using Azure.Messaging.ServiceBus;
+using MesagePublisher.Helpers;
 
-string connectionString = "queue-or-topic";
-const int messageCount = 50000;
-const string queueOrTopicName = "queue-or-topic-name";
-const string analysisId = "analisys-id";
-long maxSizeInBytes = 256000; // More info https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-quotas#messaging-quotas
-int batchCounter = 0;
+string connectionString = "";
+const string queueOrTopicName = "credit-analysis-notifications";
+const string analysisId = "hyperscale_parallelism3";
+long maxSizeInBytes = 1048576; // More info https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-quotas#messaging-quotas
+int batchCounter = 1;
+int messageCount = 0;
+int messagesToSend = 5;
 
 ServiceBusClient client;
 ServiceBusSender sender;
 
-var clientOptions = new ServiceBusClientOptions()
+(client, sender) = ServiceBusHelper.CreateSender(connectionString, queueOrTopicName);
+
+var messageBatch = await ServiceBusHelper.CreateMessageBatch(sender, maxSizeInBytes);
+
+const string filePath = "documents.csv";
+
+using (var reader = new StreamReader(filePath))
 {
-    TransportType = ServiceBusTransportType.AmqpWebSockets
-};
+    string? document = string.Empty;
 
-client = new ServiceBusClient(connectionString, clientOptions);
-sender = client.CreateSender(queueOrTopicName);
+    //skip header
+    reader.ReadLine();
 
-var createMessageBatchOptions = new CreateMessageBatchOptions()
-{
-    MaxSizeInBytes = maxSizeInBytes
-};
-
-var messageBatch = await sender.CreateMessageBatchAsync(createMessageBatchOptions);
-
-for (int i = 1; i <= messageCount; i++)
-{
-    var groupId = Guid.NewGuid().ToString("N")[0..25];
-    var messageBody = $@"{{""AnalysisId"":""{analysisId}"", ""GroupId"":""{groupId}"",""Documents"":[{{""Number"":""16418662091"",""Root"":""16418662091"",""Type"":1}}],""Limit"":{{""ExpiresAt"":""2024-01-01T00:00:00"",""GlobalLimit"":{{""MaxLimitAmount"":100000.0}},""ProductLimits"":[{{""Type"":0,""MaxLimitAmount"":50000.0,""Metadata"":{{""max_with_draw_amount"":""2000"",""max_withdraw_percentile"":""0.2""}}}},{{""Type"":1,""MaxLimitAmount"":50000.0,""Metadata"":{{""min_interest_rate"":""2.99"",""max_interest_rate"":""5.99"",""min_term_in_month"":""6"",""max_term_in_month"":""12"",""max_pmt"":""5000"",""estimated_monthly_revenue"":""1200300400""}}}}]}},""Rating"":{{""ExpiresAt"":""2024-01-01T00:00:00"",""Value"":9.9}},""Timestamp"":""2023-11-22T13:00:00.0348313Z"",""CommandKey"":""{Guid.NewGuid().ToString()[0..25]}"",""SessionKey"":""{groupId}"",""ChannelKey"":""CommandsQueue"",""IdempotencyKey"":""{Guid.NewGuid().ToString("N")[0..25]}"",""SagaProcessKey"":""{Guid.NewGuid().ToString("N")[0..25]}"",""BatchProcessKey"":null,""Result"":{{}},""Id"":""{groupId}"",""ApplicationKey"":""console-app"",""UserEmail"":""teste@stone.com.br"",""ValidationResult"":null}}";
-    var message = new ServiceBusMessage(messageBody)
+    while ((document = reader.ReadLine()) != null && messageCount < messagesToSend)
     {
-        SessionId = groupId,
-        Subject = "UpdateRiskParametersFromEngine",
-        ContentType = "application/json"
-    };
+        var groupId = document;
+        var idempotencyKey = Guid.NewGuid().ToString()[0..25];
 
-    // try adding a message to the batch
-    // if the size exceeds, send the accumulated batch and create a new one, until the number of messages to send ends
-    if (!messageBatch.TryAddMessage(message))
-    {
-        // Use the producer client to send the batch of messages to the Service Bus queue
-        await sender.SendMessagesAsync(messageBatch);
+        byte[]? compressedBody = null;
 
-        Console.WriteLine($"Batch size exceeded at {i} iteration. {messageBatch.Count} messages were sent. Creating a new batch...");
-        messageBatch = await sender.CreateMessageBatchAsync(createMessageBatchOptions);
-        batchCounter++;
+        try
+        {
+            var messageByteArray = Encoding.UTF8.GetBytes(GetMessageBody(analysisId, groupId, idempotencyKey));
+            compressedBody = MsgPackHelper.SerializeCompressed(messageByteArray);
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"Error to compress serialized body. Message: {exception.Message} ");
+        }
+
+        var message = BuildMessage(groupId, idempotencyKey, compressedBody);
+
+        // try adding a message to the batch
+        // if the size exceeds, send the accumulated batch and create a new one, until the number of messages to send ends
+        if (!messageBatch.TryAddMessage(message))
+        {
+            try
+            {
+                // Use the producer client to send the batch of messages to the Service Bus queue
+                await sender.SendMessagesAsync(messageBatch);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"Error while sending message to bus. Message: {e.Message}");
+                throw;
+            }
+
+            Console.WriteLine($"Batch size exceeded at {messageCount} iteration. {messageBatch.Count} messages were sent. Creating a new batch...");
+            messageBatch = await ServiceBusHelper.CreateMessageBatch(sender, maxSizeInBytes);
+            batchCounter++;
+        }
+        messageCount++;
     }
 }
 
@@ -54,13 +73,11 @@ await sender.SendMessagesAsync(messageBatch);
 
 try
 {
-    Console.WriteLine($"A batch of {messageCount} messages has been published to the queue.");
+    Console.WriteLine($"A batch of {messageCount} messages has been published to bus.");
     Console.WriteLine($"{batchCounter} batches were created.");
 }
 finally
 {
-    // Calling DisposeAsync on client types is required to ensure that network
-    // resources and other unmanaged objects are properly cleaned up.
     await sender.DisposeAsync();
     await client.DisposeAsync();
     messageBatch.Dispose();
@@ -68,3 +85,89 @@ finally
 
 Console.WriteLine("Press any key to end the application");
 Console.ReadKey();
+
+static string GetMessageBody(string analysisId, string groupId, string idempotencyKey)
+{
+    return @$"{{
+    ""Event"": {{
+        ""EventName"": ""ConcessionAnalysis"",
+        ""EventVersion"": 1,
+        ""EventKey"": ""{idempotencyKey}"",
+        ""Timestamp"": ""{DateTime.UtcNow}"",
+        ""Type"": ""ConcessionAnalysisCompleted"",
+        ""SagaProcessKey"": ""{analysisId}"",
+        ""Metadata"": {{
+            ""analysis_id"": ""{analysisId}"",
+            ""group_id"": ""{groupId}"",
+            ""documents"": [
+                {{
+                    ""number"": ""{groupId}"",
+                    ""root"": ""{groupId}"",
+                    ""type"": ""CPF""
+                }}
+            ],
+            ""output"": {{
+                ""limits"": {{
+                    ""expires_at"": ""2026-12-01"",
+                    ""global_limit"": {{
+                        ""max_limit_amount"": 100000.0
+                    }},
+                    ""products"": {{
+                        ""credit_card"": {{
+                            ""max_limit_amount"": 0,
+                            ""metadata"": {{
+                                ""key"": ""value""
+                            }}
+                        }},
+                        ""working_capital"": {{
+                            ""max_limit_amount"": 50000,
+                            ""metadata"": {{
+                                ""key"": ""value""
+                            }}
+                        }}
+                    }}
+                }},
+                ""rating"": {{
+                    ""expires_at"": ""2026-12-01"",
+                    ""value"": ""5.0"",
+                    ""metadata"": {{
+                        ""key"": ""value""
+                    }}
+                }}
+            }}
+        }},
+        ""ActionName"": ""Completed"",
+        ""EventSource"": ""MessagePublisherConsoleApp"",
+        ""Label"": ""ConcessionAnalysisCompleted""
+    }},
+    ""Requester"": ""credit-risk-paramaters"",
+    ""Timestamp"": ""{DateTime.UtcNow}"",
+    ""CommandKey"": ""{Guid.NewGuid().ToString()[0..25]}"",
+    ""SessionKey"": ""{groupId}"",
+    ""ChannelKey"": ""NotificationsTopic"",
+    ""IdempotencyKey"": ""{idempotencyKey}"",
+    ""SagaProcessKey"": ""{analysisId}"",
+    ""BatchProcessKey"": null,
+    ""Result"": null,
+    ""Id"": ""{groupId}"",
+    ""ApplicationKey"": ""MessagePublisherConsoleApp"",
+    ""UserEmail"": ""teste@stone.com.br"",
+    ""ValidationResult"": null
+    }}";
+}
+
+static ServiceBusMessage BuildMessage(string groupId, string idempotencyKey, byte[]? compressedBody)
+{
+    var message = new ServiceBusMessage(compressedBody)
+    {
+        MessageId = Guid.NewGuid().ToString(),
+        SessionId = groupId,
+        ScheduledEnqueueTime = DateTime.UtcNow,
+        CorrelationId = idempotencyKey,
+        Subject = "PublishPublicEvent",
+        ContentType = "application/x-msgpack"
+        //ContentType = "application/json"
+    };
+    message.ApplicationProperties.Add("SerializationType", (int)SerializationType.MsgPack);
+    return message;
+}
