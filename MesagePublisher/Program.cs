@@ -3,12 +3,12 @@ using Azure.Messaging.ServiceBus;
 using MesagePublisher.Helpers;
 
 string connectionString = "";
-const string queueOrTopicName = "credit-analysis-notifications";
-const string analysisId = "hyperscale_parallelism3";
+const string queueOrTopicName = "";
+const string analysisId = "";
 long maxSizeInBytes = 1048576; // More info https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-quotas#messaging-quotas
 int batchCounter = 1;
 int messageCount = 0;
-int messagesToSend = 5;
+int messagesToSend = 0;
 
 ServiceBusClient client;
 ServiceBusSender sender;
@@ -93,7 +93,7 @@ static string GetMessageBody(string analysisId, string groupId, string idempoten
         ""EventName"": ""ConcessionAnalysis"",
         ""EventVersion"": 1,
         ""EventKey"": ""{idempotencyKey}"",
-        ""Timestamp"": ""{DateTime.UtcNow}"",
+        ""Timestamp"": ""2024-09-18T00:00:00"",
         ""Type"": ""ConcessionAnalysisCompleted"",
         ""SagaProcessKey"": ""{analysisId}"",
         ""Metadata"": {{
@@ -108,7 +108,7 @@ static string GetMessageBody(string analysisId, string groupId, string idempoten
             ],
             ""output"": {{
                 ""limits"": {{
-                    ""expires_at"": ""2026-12-01"",
+                    ""expires_at"": ""2024-09-20T23:59:00"",
                     ""global_limit"": {{
                         ""max_limit_amount"": 100000.0
                     }},
@@ -128,7 +128,7 @@ static string GetMessageBody(string analysisId, string groupId, string idempoten
                     }}
                 }},
                 ""rating"": {{
-                    ""expires_at"": ""2026-12-01"",
+                    ""expires_at"": ""2024-09-20T23:59:00"",
                     ""value"": ""5.0"",
                     ""metadata"": {{
                         ""key"": ""value""
@@ -141,7 +141,7 @@ static string GetMessageBody(string analysisId, string groupId, string idempoten
         ""Label"": ""ConcessionAnalysisCompleted""
     }},
     ""Requester"": ""credit-risk-paramaters"",
-    ""Timestamp"": ""{DateTime.UtcNow}"",
+    ""Timestamp"": ""2024-09-18T00:00:00"",
     ""CommandKey"": ""{Guid.NewGuid().ToString()[0..25]}"",
     ""SessionKey"": ""{groupId}"",
     ""ChannelKey"": ""NotificationsTopic"",
@@ -166,7 +166,6 @@ static ServiceBusMessage BuildMessage(string groupId, string idempotencyKey, byt
         CorrelationId = idempotencyKey,
         Subject = "PublishPublicEvent",
         ContentType = "application/x-msgpack"
-        //ContentType = "application/json"
     };
     message.ApplicationProperties.Add("SerializationType", (int)SerializationType.MsgPack);
     return message;
